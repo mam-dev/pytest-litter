@@ -219,4 +219,4 @@ def test_plugin_with_pytester(pytester: pytest.Pytester) -> None:
     pytester.copy_example("pytest.ini")
     pytester.copy_example("pytester_tests.py")
     result: pytest.RunResult = pytester.runpytest()
-    result.assert_outcomes(passed=2, failed=1, xfailed=1)
+    result.assert_outcomes(passed=2, xfailed=2)

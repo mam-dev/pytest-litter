@@ -8,6 +8,7 @@ def pytester_should_pass() -> None:
     """Do not create any litter."""
 
 
+@pytest.mark.xfail
 def pytester_should_fail() -> None:
     """Create a file 'litter' in cwd which is not cleaned up."""
     (Path.cwd() / "litter").touch()
