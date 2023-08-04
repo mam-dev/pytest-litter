@@ -1,6 +1,7 @@
 """Tests for the plugin module."""
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Optional
+from typing import TYPE_CHECKING, Optional
 from unittest.mock import Mock, call
 
 import pytest

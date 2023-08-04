@@ -4,12 +4,11 @@ description = "Pytest plugin which verifies that tests do not modify file trees.
 readme = "README.md"
 license = {file = "LICENSE"}
 urls = {repo = "https://github.com/mam-dev/pytest-litter"}
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = ["pytest >= 6.1"]
 dynamic = ["version"]
 classifiers = [
   "Development Status :: 4 - Beta",
-  "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",

@@ -1,5 +1,6 @@
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable
 
 import pytest
 
