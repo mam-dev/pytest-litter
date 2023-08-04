@@ -1,6 +1,9 @@
 [project]
 name = "pytest-litter"
 description = "Pytest plugin which verifies that tests do not modify file trees."
+authors = [
+  {name="Anton Vikström"}
+]
 readme = "README.md"
 license = {file = "LICENSE"}
 urls = {repo = "https://github.com/mam-dev/pytest-litter"}
