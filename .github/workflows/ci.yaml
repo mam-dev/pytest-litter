@@ -25,6 +25,4 @@ jobs:
     - name: Run tox
       run: tox
     - name: System test
-      env:
-        SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.1"
       run: ./tests/system_test/system_test.sh
