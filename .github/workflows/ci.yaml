@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        python_version: ["3.9", "3.10", "3.11"]
+    runs-on: "ubuntu-latest"
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python_version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python_version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip wheel
+        python -m pip install tox==4.* tox-gh-actions==3.*
+    - name: Run tox
+      run: tox
+    - name: System test
+      run: ./tests/system_test/system_test.sh

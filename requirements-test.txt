@@ -1,0 +1,4 @@
+pytest
+coverage>=5.3
+pytest-random-order
+pytest-integration
