@@ -10,6 +10,40 @@ class UnexpectedLitterError(Exception):
     """Error that should not occur normally, indicative of some programming error."""
 
 
+class IgnoreSpec(abc.ABC):
+    """Specification about paths to ignore in comparisons."""
+
+    __slots__ = ()
+
+    @abc.abstractmethod
+    def matches(self, path: Path) -> bool:
+        ...  # pragma: no cover
+
+
+class DirectoryIgnoreSpec(IgnoreSpec):
+    """Specification to ignore everything in a given directory."""
+
+    __slots__ = ("_directory",)
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+
+    def matches(self, path: Path) -> bool:
+        return self._directory == path or self._directory in path.parents
+
+
+class RegexIgnoreSpec(IgnoreSpec):
+    """Regex-based specification about paths to ignore in comparisons."""
+
+    __slots__ = ("_regex",)
+
+    def __init__(self, regex: Union[str, re.Pattern[str]]) -> None:
+        self._regex: re.Pattern[str] = re.compile(regex)
+
+    def matches(self, path: Path) -> bool:
+        return self._regex.fullmatch(str(path)) is not None
+
+
 class PathSnapshot:
     """A snapshot of a path."""
 
@@ -101,40 +135,6 @@ class SnapshotComparison:
         return not self._only_a and not self._only_b
 
 
-class IgnoreSpec(abc.ABC):
-    """Specification about paths to ignore in comparisons."""
-
-    __slots__ = ()
-
-    @abc.abstractmethod
-    def matches(self, path: PathSnapshot) -> bool:
-        ...  # pragma: no cover
-
-
-class DirectoryIgnoreSpec(IgnoreSpec):
-    """Specification to ignore everything in a given directory."""
-
-    __slots__ = ("_directory",)
-
-    def __init__(self, directory: Path) -> None:
-        self._directory = directory
-
-    def matches(self, path: PathSnapshot) -> bool:
-        return self._directory == path.path or self._directory in path.path.parents
-
-
-class RegexIgnoreSpec(IgnoreSpec):
-    """Regex-based specification about paths to ignore in comparisons."""
-
-    __slots__ = ("_regex",)
-
-    def __init__(self, regex: Union[str, re.Pattern[str]]) -> None:
-        self._regex: re.Pattern[str] = re.compile(regex)
-
-    def matches(self, path: PathSnapshot) -> bool:
-        return self._regex.fullmatch(str(path)) is not None
-
-
 class SnapshotComparator:
     """Compare TreeSnapshots with each other."""
 
@@ -144,13 +144,13 @@ class SnapshotComparator:
         """Initialize.
 
         Args:
-            ignore_specs: Glob patterns to ignore when doing the comparison.
+            ignore_specs: Specifies paths to ignore when doing the comparison.
 
         """
         self._ignore_specs: frozenset[IgnoreSpec] = frozenset(ignore_specs or [])
 
     def _should_be_ignored(self, path: PathSnapshot) -> bool:
-        return any(ignore_spec.matches(path) for ignore_spec in self._ignore_specs)
+        return any(ignore_spec.matches(path.path) for ignore_spec in self._ignore_specs)
 
     def compare(
         self, snapshot_a: TreeSnapshot, snapshot_b: TreeSnapshot

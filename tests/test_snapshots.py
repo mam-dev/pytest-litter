@@ -105,7 +105,7 @@ def test_directory_ignore_spec(
     directory: Path, path: snapshots.PathSnapshot, expected_match: bool
 ) -> None:
     ignore_spec = snapshots.DirectoryIgnoreSpec(directory=directory)
-    assert ignore_spec.matches(path=path) == expected_match
+    assert ignore_spec.matches(path=path.path) == expected_match
 
 
 @pytest.mark.parametrize(
@@ -123,7 +123,7 @@ def test_regex_ignore_spec(
     expected_match: bool,
 ) -> None:
     ignore_spec = snapshots.RegexIgnoreSpec(regex=regex)
-    assert ignore_spec.matches(path=path) == expected_match
+    assert ignore_spec.matches(path=path.path) == expected_match
 
 
 def test_snapshot_comparator__same(tmp_tree_root: Path) -> None:
