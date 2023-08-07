@@ -164,15 +164,17 @@ def test_pytest_configure(monkeypatch: "MonkeyPatch", basetemp: Optional[Path]) 
         "pytest_litter.plugin.plugin.DirectoryIgnoreSpec",
         mock_dir_ignore_spec,
     )
-    mock_regex_ignore_spec = Mock(spec=snapshots.RegexIgnoreSpec)
+    mock_name_ignore_spec = Mock(spec=snapshots.NameIgnoreSpec)
     monkeypatch.setattr(
-        "pytest_litter.plugin.plugin.RegexIgnoreSpec",
-        mock_regex_ignore_spec,
+        "pytest_litter.plugin.plugin.NameIgnoreSpec",
+        mock_name_ignore_spec,
     )
     expected_ignore_specs = []
     if basetemp is not None:
         expected_ignore_specs.append(mock_dir_ignore_spec.return_value)
-    expected_ignore_specs.append(mock_regex_ignore_spec.return_value)
+    expected_ignore_specs.append(mock_name_ignore_spec.return_value)
+    expected_ignore_specs.append(mock_name_ignore_spec.return_value)
+    expected_ignore_specs.append(mock_name_ignore_spec.return_value)
 
     plugin.pytest_configure(mock_config)
 
@@ -202,7 +204,9 @@ def test_pytest_configure(monkeypatch: "MonkeyPatch", basetemp: Optional[Path]) 
         )
     else:
         mock_dir_ignore_spec.assert_not_called()
-    mock_regex_ignore_spec.assert_has_calls([call(regex=r".*/__pycache__.*")])
+    mock_name_ignore_spec.assert_has_calls(
+        [call(name="__pycache__"), call(name="venv"), call(name=".venv")]
+    )
 
 
 def test_pytest_runtest_call(monkeypatch: "MonkeyPatch") -> None:

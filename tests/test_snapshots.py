@@ -198,3 +198,50 @@ def test_snapshot_comparator__incompatible_snapshots(
 def test_litter_config(ignore_specs: Optional[Iterable[snapshots.IgnoreSpec]]) -> None:
     config = snapshots.LitterConfig(ignore_specs=ignore_specs)
     assert config.ignore_specs == frozenset(ignore_specs or [])
+
+
+class _FakeIgnoreSpec(snapshots.IgnoreSpec):
+    def matches(self, path: Path) -> bool:
+        return "a" in path.parts
+
+
+@pytest.mark.parametrize(
+    "config, expected_paths",
+    [
+        (
+            snapshots.LitterConfig(),
+            [
+                Path("a"),
+                Path("a/a_file"),
+                Path("a/a_1"),
+                Path("a/a_1/a_1_file"),
+                Path("b"),
+                Path("b/b_file"),
+            ],
+        ),
+        (
+            snapshots.LitterConfig(ignore_specs=[_FakeIgnoreSpec()]),
+            [Path("b"), Path("b/b_file")],
+        ),
+    ],
+)
+def test_create_snapshot(
+    config: snapshots.LitterConfig, expected_paths: list[Path], tmp_tree_root: Path
+) -> None:
+    factory = snapshots.TreeSnapshotFactory(config=config)
+    snapshot: snapshots.TreeSnapshot = factory.create_snapshot(root=tmp_tree_root)
+    assert {str(p) for p in snapshot.paths} == {
+        str(tmp_tree_root / path) for path in expected_paths
+    }
+
+
+@pytest.mark.parametrize(
+    "name, path, expected_match",
+    [
+        ("c", Path("a/b/c"), True),
+        ("c", Path("a/b"), False),
+        ("a", Path("a/b"), True),
+    ],
+)
+def test_name_ignore_spec(name: str, path: Path, expected_match: bool) -> None:
+    assert snapshots.NameIgnoreSpec(name=name).matches(path=path) == expected_match

@@ -15,7 +15,7 @@ from pytest_litter.snapshots import (
     DirectoryIgnoreSpec,
     IgnoreSpec,
     LitterConfig,
-    RegexIgnoreSpec,
+    NameIgnoreSpec,
     SnapshotComparator,
     TreeSnapshotFactory,
 )
@@ -31,7 +31,9 @@ def pytest_configure(config: pytest.Config) -> None:
                 directory=config.rootpath / basetemp,
             )
         )
-    ignore_specs.append(RegexIgnoreSpec(regex=r".*/__pycache__.*"))
+    ignore_specs.append(NameIgnoreSpec(name="__pycache__"))
+    ignore_specs.append(NameIgnoreSpec(name="venv"))
+    ignore_specs.append(NameIgnoreSpec(name=".venv"))
     litter_config = LitterConfig(ignore_specs=ignore_specs)
     snapshot_factory = TreeSnapshotFactory(config=litter_config)
     config.stash[SNAPSHOT_FACTORY_KEY] = snapshot_factory

@@ -32,6 +32,18 @@ class DirectoryIgnoreSpec(IgnoreSpec):
         return self._directory == path or self._directory in path.parents
 
 
+class NameIgnoreSpec(IgnoreSpec):
+    """Specification to ignore all directories/files with a given name."""
+
+    __slots__ = ("_name",)
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def matches(self, path: Path) -> bool:
+        return self._name in path.parts
+
+
 class RegexIgnoreSpec(IgnoreSpec):
     """Regex-based specification about paths to ignore in comparisons."""
 
@@ -136,7 +148,9 @@ class TreeSnapshotFactory:
         self._ignore_specs: frozenset[IgnoreSpec] = frozenset(config.ignore_specs or [])
 
     def _should_be_ignored(self, path: Path) -> bool:
-        return any(ignore_spec.matches(path) for ignore_spec in self._ignore_specs)
+        return path.name == "." or any(
+            ignore_spec.matches(path) for ignore_spec in self._ignore_specs
+        )
 
     def create_snapshot(self, root: Path) -> TreeSnapshot:
         return TreeSnapshot(
