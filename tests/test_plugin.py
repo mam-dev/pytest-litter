@@ -94,10 +94,11 @@ def test_raise_test_error_from_comparison(
 @pytest.mark.parametrize("matches", [False, True])
 def test_run_snapshot_comparison(
     monkeypatch: "MonkeyPatch",
+    tmp_path: Path,
     matches: bool,
 ) -> None:
     test_name = "test_fake"
-    mock_snapshot_old = Mock(spec=snapshots.TreeSnapshot, root=Path("fake"))
+    mock_snapshot_old = Mock(spec=snapshots.TreeSnapshot, root=tmp_path)
     mock_comparator = Mock(spec=snapshots.SnapshotComparator)
     mock_comparator.compare.return_value = Mock(
         spec=snapshots.SnapshotComparison, matches=matches
@@ -126,11 +127,11 @@ def test_run_snapshot_comparison(
     )
 
     mock_snapshot_cls.assert_called_once_with(root=mock_snapshot_old.root)
-    assert mock_config.stash[utils.SNAPSHOT_KEY] is mock_snapshot_cls.return_value
     mock_comparator.compare.assert_called_once_with(
         mock_snapshot_old,
         mock_snapshot_cls.return_value,
     )
+    assert mock_config.stash[utils.SNAPSHOT_KEY] is mock_snapshot_cls.return_value
     if matches:
         mock_cb.assert_not_called()
     else:
@@ -218,6 +219,6 @@ def test_plugin_with_pytester(pytester: pytest.Pytester) -> None:
     # pytester uses basetemp internally, so the case without basetemp
     # cannot be tested using pytester.
     pytester.copy_example("pytest.ini")
-    pytester.copy_example("pytester_tests.py")
+    pytester.copy_example("suite_tests.py")
     result: pytest.RunResult = pytester.runpytest()
     result.assert_outcomes(passed=2, xfailed=2)

@@ -37,7 +37,7 @@ namespaces = false
 [tool.pytest.ini_options]
 addopts = "--random-order -p no:pytest-litter -p pytester -vv"
 testpaths = ["tests"]
-pytester_example_dir = "tests/pytester"
+pytester_example_dir = "tests/suite"
 
 [tool.coverage.run]
 branch = true

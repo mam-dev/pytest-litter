@@ -3,7 +3,7 @@
 echo "Preparing system test..."
 WORK_DIR=$(mktemp --directory)
 ROOT_DIR="$(git rev-parse --show-toplevel)"
-TEST_DIR="${ROOT_DIR}/tests/pytester"
+TEST_DIR="${ROOT_DIR}/tests/suite"
 cp "${TEST_DIR}"/* "${WORK_DIR}"
 pushd "${WORK_DIR}" &> /dev/null || exit 1
 VENV="${WORK_DIR}/venv"
