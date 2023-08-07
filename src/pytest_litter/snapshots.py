@@ -44,6 +44,25 @@ class RegexIgnoreSpec(IgnoreSpec):
         return self._regex.fullmatch(str(path)) is not None
 
 
+class LitterConfig:
+    """Configuration for pytest-litter."""
+
+    __slots__ = ("_ignore_specs",)
+
+    def __init__(self, ignore_specs: Optional[Iterable[IgnoreSpec]] = None) -> None:
+        """Initialize.
+
+        Args:
+            ignore_specs: Specifies paths to ignore when doing the comparison.
+
+        """
+        self._ignore_specs: frozenset[IgnoreSpec] = frozenset(ignore_specs or [])
+
+    @property
+    def ignore_specs(self) -> frozenset[IgnoreSpec]:
+        return self._ignore_specs
+
+
 class PathSnapshot:
     """A snapshot of a path."""
 
@@ -76,18 +95,19 @@ class TreeSnapshot:
 
     __slots__ = ("_root", "_paths")
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, paths: Iterable[Path]) -> None:
         """Initialize.
 
         Args:
             root: The root directory of the tree.
+            paths: All paths in the snapshot.
 
         """
         if not root.is_dir():
             raise UnexpectedLitterError(f"'{root}' is not a directory.")
         self._root: Path = root
         self._paths: frozenset[PathSnapshot] = frozenset(
-            PathSnapshot(path=path) for path in self._root.rglob("*")
+            PathSnapshot(path=path) for path in paths
         )
 
     @property
@@ -99,6 +119,32 @@ class TreeSnapshot:
     def paths(self) -> frozenset[PathSnapshot]:
         """The paths in the snapshot."""
         return self._paths
+
+
+class TreeSnapshotFactory:
+    """Factory class for TreeSnapshotFactory."""
+
+    __slots__ = ("_ignore_specs",)
+
+    def __init__(self, config: LitterConfig) -> None:
+        """Initialize.
+
+        Args:
+            config: pytest-litter configuration.
+
+        """
+        self._ignore_specs: frozenset[IgnoreSpec] = frozenset(config.ignore_specs or [])
+
+    def _should_be_ignored(self, path: Path) -> bool:
+        return any(ignore_spec.matches(path) for ignore_spec in self._ignore_specs)
+
+    def create_snapshot(self, root: Path) -> TreeSnapshot:
+        return TreeSnapshot(
+            root=root,
+            paths=(
+                path for path in root.rglob("*") if not self._should_be_ignored(path)
+            ),
+        )
 
 
 class SnapshotComparison:
@@ -140,20 +186,18 @@ class SnapshotComparator:
 
     __slots__ = ("_ignore_specs",)
 
-    def __init__(self, ignore_specs: Optional[Iterable[IgnoreSpec]] = None) -> None:
+    def __init__(self, config: LitterConfig) -> None:
         """Initialize.
 
         Args:
-            ignore_specs: Specifies paths to ignore when doing the comparison.
+            config: pytest-litter configuration.
 
         """
-        self._ignore_specs: frozenset[IgnoreSpec] = frozenset(ignore_specs or [])
+        self._ignore_specs: frozenset[IgnoreSpec] = frozenset(config.ignore_specs or [])
 
-    def _should_be_ignored(self, path: PathSnapshot) -> bool:
-        return any(ignore_spec.matches(path.path) for ignore_spec in self._ignore_specs)
-
+    @staticmethod
     def compare(
-        self, snapshot_a: TreeSnapshot, snapshot_b: TreeSnapshot
+        snapshot_a: TreeSnapshot, snapshot_b: TreeSnapshot
     ) -> SnapshotComparison:
         """Compare snapshot_a and snapshot_b to produce a SnapshotComparison."""
         if snapshot_a.root != snapshot_b.root:
@@ -163,9 +207,7 @@ class SnapshotComparator:
         common_paths: frozenset[PathSnapshot] = snapshot_a.paths.intersection(
             snapshot_b.paths
         )
-        only_in_a: frozenset[PathSnapshot] = snapshot_a.paths - common_paths
-        only_in_b: frozenset[PathSnapshot] = snapshot_b.paths - common_paths
         return SnapshotComparison(
-            only_a=(path for path in only_in_a if not self._should_be_ignored(path)),
-            only_b=(path for path in only_in_b if not self._should_be_ignored(path)),
+            only_a=snapshot_a.paths - common_paths,
+            only_b=snapshot_b.paths - common_paths,
         )

@@ -2,11 +2,23 @@
 import re
 from collections.abc import Hashable, Iterable
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import pytest
 
 from pytest_litter import snapshots
+
+
+@pytest.fixture(name="empty_config")
+def fixture_empty_config() -> snapshots.LitterConfig:
+    return snapshots.LitterConfig()
+
+
+@pytest.fixture(name="snapshot_factory")
+def fixture_snapshot_factory(
+    empty_config: snapshots.LitterConfig,
+) -> snapshots.TreeSnapshotFactory:
+    return snapshots.TreeSnapshotFactory(config=empty_config)
 
 
 @pytest.fixture(name="tmp_tree_root")
@@ -27,14 +39,14 @@ def fixture_tmp_tree_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture(name="tree_paths")
-def fixture_tree_paths(tmp_tree_root: Path) -> list[snapshots.PathSnapshot]:
+def fixture_tree_paths(tmp_tree_root: Path) -> list[Path]:
     return [
-        snapshots.PathSnapshot(path=tmp_tree_root / "a"),
-        snapshots.PathSnapshot(path=tmp_tree_root / "a" / "a_file"),
-        snapshots.PathSnapshot(path=tmp_tree_root / "b"),
-        snapshots.PathSnapshot(path=tmp_tree_root / "b" / "b_file"),
-        snapshots.PathSnapshot(path=tmp_tree_root / "a" / "a_1"),
-        snapshots.PathSnapshot(path=tmp_tree_root / "a" / "a_1" / "a_1_file"),
+        tmp_tree_root / "a",
+        tmp_tree_root / "a" / "a_file",
+        tmp_tree_root / "b",
+        tmp_tree_root / "b" / "b_file",
+        tmp_tree_root / "a" / "a_1",
+        tmp_tree_root / "a" / "a_1" / "a_1_file",
     ]
 
 
@@ -52,15 +64,16 @@ def test_path_snapshot(tmp_tree_root: Path) -> None:
 def test_tree_snapshot__bad_root(tmp_path: Path) -> None:
     input_path = tmp_path / "fake_file"
     with pytest.raises(snapshots.UnexpectedLitterError):
-        _ = snapshots.TreeSnapshot(root=input_path)
+        # paths are irrelevant here
+        _ = snapshots.TreeSnapshot(root=input_path, paths=[])
 
 
-def test_tree_snapshot(
-    tmp_tree_root: Path, tree_paths: list[snapshots.PathSnapshot]
-) -> None:
-    snapshot = snapshots.TreeSnapshot(root=tmp_tree_root)
+def test_tree_snapshot(tmp_tree_root: Path, tree_paths: list[Path]) -> None:
+    snapshot = snapshots.TreeSnapshot(root=tmp_tree_root, paths=tree_paths)
     assert snapshot.root == tmp_tree_root
-    assert snapshot.paths == frozenset(tree_paths)
+    assert snapshot.paths == frozenset(
+        snapshots.PathSnapshot(path) for path in tree_paths
+    )
 
 
 @pytest.mark.parametrize(
@@ -126,60 +139,62 @@ def test_regex_ignore_spec(
     assert ignore_spec.matches(path=path.path) == expected_match
 
 
-def test_snapshot_comparator__same(tmp_tree_root: Path) -> None:
-    snapshot = snapshots.TreeSnapshot(root=tmp_tree_root)
-    comparison = snapshots.SnapshotComparator().compare(snapshot, snapshot)
-    assert comparison.matches
-    assert not comparison.only_a
-    assert not comparison.only_b
-
-
-def test_snapshot_comparator__only_b(tmp_tree_root: Path) -> None:
-    snapshot_a = snapshots.TreeSnapshot(root=tmp_tree_root)
-    new_file = tmp_tree_root / "new_file"
-    new_file.touch()
-    snapshot_b = snapshots.TreeSnapshot(root=tmp_tree_root)
-    comparison = snapshots.SnapshotComparator().compare(snapshot_a, snapshot_b)
-    assert not comparison.matches
-    assert not comparison.only_a
-    assert comparison.only_b == frozenset((snapshots.PathSnapshot(path=new_file),))
-
-
-def test_snapshot_comparator__only_a(tmp_tree_root: Path) -> None:
-    snapshot_b = snapshots.TreeSnapshot(root=tmp_tree_root)
-    new_file = tmp_tree_root / "new_file"
-    new_file.touch()
-    snapshot_a = snapshots.TreeSnapshot(root=tmp_tree_root)
-    comparison = snapshots.SnapshotComparator().compare(snapshot_a, snapshot_b)
-    assert not comparison.matches
-    assert comparison.only_a == frozenset((snapshots.PathSnapshot(path=new_file),))
-    assert not comparison.only_b
-
-
-@pytest.mark.parametrize(
-    "ignore_spec",
-    [
-        snapshots.RegexIgnoreSpec(regex=r".*/new_file\.\w+"),
-    ],
-)
-def test_snapshot_comparator__only_b__ignored(
-    tmp_tree_root: Path, ignore_spec: snapshots.IgnoreSpec
+def test_snapshot_comparator__same(
+    empty_config: snapshots.LitterConfig, tmp_tree_root: Path, tree_paths: list[Path]
 ) -> None:
-    snapshot_a = snapshots.TreeSnapshot(root=tmp_tree_root)
-    (tmp_tree_root / "new_file.txt").touch()
-    (tmp_tree_root / "new_file.yml").touch()
-    snapshot_b = snapshots.TreeSnapshot(root=tmp_tree_root)
-    comparison = snapshots.SnapshotComparator(ignore_specs=[ignore_spec]).compare(
-        snapshot_a, snapshot_b
+    snapshot = snapshots.TreeSnapshot(root=tmp_tree_root, paths=tree_paths)
+    comparison = snapshots.SnapshotComparator(config=empty_config).compare(
+        snapshot, snapshot
     )
     assert comparison.matches
     assert not comparison.only_a
     assert not comparison.only_b
 
 
-def test_snapshot_comparator__incompatible_snapshots(tmp_tree_root: Path) -> None:
-    snapshot_a = snapshots.TreeSnapshot(root=tmp_tree_root)
-    snapshot_b = snapshots.TreeSnapshot(root=tmp_tree_root / "a")
-    comparator = snapshots.SnapshotComparator()
+def test_snapshot_comparator__only_b(
+    empty_config: snapshots.LitterConfig, tmp_tree_root: Path, tree_paths: list[Path]
+) -> None:
+    snapshot_a = snapshots.TreeSnapshot(root=tmp_tree_root, paths=tree_paths)
+    new_file = tmp_tree_root / "new_file"
+    tree_paths.append(new_file)
+    snapshot_b = snapshots.TreeSnapshot(root=tmp_tree_root, paths=tree_paths)
+    comparison = snapshots.SnapshotComparator(config=empty_config).compare(
+        snapshot_a, snapshot_b
+    )
+    assert not comparison.matches
+    assert not comparison.only_a
+    assert comparison.only_b == frozenset((snapshots.PathSnapshot(path=new_file),))
+
+
+def test_snapshot_comparator__only_a(
+    empty_config: snapshots.LitterConfig, tmp_tree_root: Path, tree_paths: list[Path]
+) -> None:
+    snapshot_b = snapshots.TreeSnapshot(root=tmp_tree_root, paths=tree_paths)
+    new_file = tmp_tree_root / "new_file"
+    tree_paths.append(new_file)
+    snapshot_a = snapshots.TreeSnapshot(root=tmp_tree_root, paths=tree_paths)
+    comparison = snapshots.SnapshotComparator(config=empty_config).compare(
+        snapshot_a, snapshot_b
+    )
+    assert not comparison.matches
+    assert comparison.only_a == frozenset((snapshots.PathSnapshot(path=new_file),))
+    assert not comparison.only_b
+
+
+def test_snapshot_comparator__incompatible_snapshots(
+    empty_config: snapshots.LitterConfig, tmp_tree_root: Path
+) -> None:
+    # TreeSnapshot paths are incorrect, but that is irrelevant for this test.
+    snapshot_a = snapshots.TreeSnapshot(root=tmp_tree_root, paths=[])
+    snapshot_b = snapshots.TreeSnapshot(root=tmp_tree_root / "a", paths=[])
+    comparator = snapshots.SnapshotComparator(config=empty_config)
     with pytest.raises(snapshots.UnexpectedLitterError):
         _ = comparator.compare(snapshot_a, snapshot_b)
+
+
+@pytest.mark.parametrize(
+    "ignore_specs", [None, [], [snapshots.RegexIgnoreSpec(regex=r".*")]]
+)
+def test_litter_config(ignore_specs: Optional[Iterable[snapshots.IgnoreSpec]]) -> None:
+    config = snapshots.LitterConfig(ignore_specs=ignore_specs)
+    assert config.ignore_specs == frozenset(ignore_specs or [])
