@@ -175,6 +175,7 @@ def test_pytest_configure(monkeypatch: "MonkeyPatch", basetemp: Optional[Path]) 
     expected_ignore_specs.append(mock_name_ignore_spec.return_value)
     expected_ignore_specs.append(mock_name_ignore_spec.return_value)
     expected_ignore_specs.append(mock_name_ignore_spec.return_value)
+    expected_ignore_specs.append(mock_name_ignore_spec.return_value)
 
     plugin.pytest_configure(mock_config)
 
@@ -205,7 +206,12 @@ def test_pytest_configure(monkeypatch: "MonkeyPatch", basetemp: Optional[Path]) 
     else:
         mock_dir_ignore_spec.assert_not_called()
     mock_name_ignore_spec.assert_has_calls(
-        [call(name="__pycache__"), call(name="venv"), call(name=".venv")]
+        [
+            call(name="__pycache__"),
+            call(name="venv"),
+            call(name=".venv"),
+            call(name=".pytest_cache"),
+        ]
     )
 
 
