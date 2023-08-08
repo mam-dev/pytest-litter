@@ -153,11 +153,21 @@ class TreeSnapshotFactory:
         )
 
     def create_snapshot(self, root: Path) -> TreeSnapshot:
+        paths: set[Path] = set()
+
+        def traverse(current: Path) -> None:
+            sub_paths = {
+                p for p in current.glob("*") if not self._should_be_ignored(path=p)
+            }
+            paths.update(sub_paths)
+            for sub_path in sub_paths:
+                traverse(sub_path)
+
+        traverse(root)
+
         return TreeSnapshot(
             root=root,
-            paths=(
-                path for path in root.rglob("*") if not self._should_be_ignored(path)
-            ),
+            paths=paths,
         )
 
 
