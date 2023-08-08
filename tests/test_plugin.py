@@ -94,10 +94,14 @@ def test_raise_test_error_from_comparison(
 @pytest.mark.parametrize("matches", [False, True])
 def test_run_snapshot_comparison(
     monkeypatch: "MonkeyPatch",
+    tmp_path: Path,
     matches: bool,
 ) -> None:
     test_name = "test_fake"
-    mock_snapshot_old = Mock(spec=snapshots.TreeSnapshot, root=Path("fake"))
+    mock_factory = Mock(spec=snapshots.TreeSnapshotFactory)
+    mock_snapshot_new = Mock(spec=snapshots.TreeSnapshot)
+    mock_factory.create_snapshot.return_value = mock_snapshot_new
+    mock_snapshot_old = Mock(spec=snapshots.TreeSnapshot, root=tmp_path)
     mock_comparator = Mock(spec=snapshots.SnapshotComparator)
     mock_comparator.compare.return_value = Mock(
         spec=snapshots.SnapshotComparison, matches=matches
@@ -106,13 +110,9 @@ def test_run_snapshot_comparison(
         spec=pytest.Config,
         stash={
             utils.SNAPSHOT_KEY: mock_snapshot_old,
+            utils.SNAPSHOT_FACTORY_KEY: mock_factory,
             utils.COMPARATOR_KEY: mock_comparator,
         },
-    )
-    mock_snapshot_cls = Mock(spec=snapshots.TreeSnapshot)
-    monkeypatch.setattr(
-        "pytest_litter.plugin.utils.TreeSnapshot",
-        mock_snapshot_cls,
     )
     mock_cb = Mock()
 
@@ -125,12 +125,12 @@ def test_run_snapshot_comparison(
         mismatch_cb=fake_cb,
     )
 
-    mock_snapshot_cls.assert_called_once_with(root=mock_snapshot_old.root)
-    assert mock_config.stash[utils.SNAPSHOT_KEY] is mock_snapshot_cls.return_value
+    mock_factory.create_snapshot.assert_called_once_with(root=mock_snapshot_old.root)
     mock_comparator.compare.assert_called_once_with(
         mock_snapshot_old,
-        mock_snapshot_cls.return_value,
+        mock_snapshot_new,
     )
+    assert mock_config.stash[utils.SNAPSHOT_KEY] is mock_snapshot_new
     if matches:
         mock_cb.assert_not_called()
     else:
@@ -139,10 +139,10 @@ def test_run_snapshot_comparison(
 
 @pytest.mark.parametrize("basetemp", [None, Path("tmp")])
 def test_pytest_configure(monkeypatch: "MonkeyPatch", basetemp: Optional[Path]) -> None:
-    mock_snapshot_cls = Mock(spec=snapshots.TreeSnapshot)
+    mock_snapshot_factory_cls = Mock(spec=snapshots.TreeSnapshotFactory)
     monkeypatch.setattr(
-        "pytest_litter.plugin.plugin.TreeSnapshot",
-        mock_snapshot_cls,
+        "pytest_litter.plugin.plugin.TreeSnapshotFactory",
+        mock_snapshot_factory_cls,
     )
     mock_comparator_cls = Mock(spec=snapshots.SnapshotComparator)
     monkeypatch.setattr(
@@ -155,37 +155,64 @@ def test_pytest_configure(monkeypatch: "MonkeyPatch", basetemp: Optional[Path]) 
         stash={},
         getoption=Mock(spec=pytest.Config.getoption, return_value=basetemp),
     )
+    mock_litter_config_cls = Mock(spec=snapshots.LitterConfig)
+    monkeypatch.setattr(
+        "pytest_litter.plugin.plugin.LitterConfig", mock_litter_config_cls
+    )
     mock_dir_ignore_spec = Mock(spec=snapshots.DirectoryIgnoreSpec)
     monkeypatch.setattr(
         "pytest_litter.plugin.plugin.DirectoryIgnoreSpec",
         mock_dir_ignore_spec,
     )
-    mock_regex_ignore_spec = Mock(spec=snapshots.RegexIgnoreSpec)
+    mock_name_ignore_spec = Mock(spec=snapshots.NameIgnoreSpec)
     monkeypatch.setattr(
-        "pytest_litter.plugin.plugin.RegexIgnoreSpec",
-        mock_regex_ignore_spec,
+        "pytest_litter.plugin.plugin.NameIgnoreSpec",
+        mock_name_ignore_spec,
     )
     expected_ignore_specs = []
     if basetemp is not None:
         expected_ignore_specs.append(mock_dir_ignore_spec.return_value)
-    expected_ignore_specs.append(mock_regex_ignore_spec.return_value)
+    expected_ignore_specs.append(mock_name_ignore_spec.return_value)
+    expected_ignore_specs.append(mock_name_ignore_spec.return_value)
+    expected_ignore_specs.append(mock_name_ignore_spec.return_value)
+    expected_ignore_specs.append(mock_name_ignore_spec.return_value)
 
     plugin.pytest_configure(mock_config)
 
     mock_config.getoption.assert_called_once_with("basetemp", None)
-    assert mock_config.stash[utils.SNAPSHOT_KEY] is mock_snapshot_cls.return_value
-    mock_snapshot_cls.assert_called_once_with(root=mock_config.rootpath)
-    assert mock_config.stash[utils.COMPARATOR_KEY] is mock_comparator_cls.return_value
-    mock_comparator_cls.assert_called_once_with(
+    mock_litter_config_cls.assert_called_once_with(
         ignore_specs=expected_ignore_specs,
     )
+    mock_snapshot_factory_cls.assert_called_once_with(
+        config=mock_litter_config_cls.return_value
+    )
+    mock_snapshot_factory_cls.return_value.create_snapshot.assert_called_once_with(
+        root=mock_config.rootpath
+    )
+    assert (
+        mock_config.stash[utils.SNAPSHOT_FACTORY_KEY]
+        is mock_snapshot_factory_cls.return_value
+    )
+    assert (
+        mock_config.stash[utils.SNAPSHOT_KEY]
+        is mock_snapshot_factory_cls.return_value.create_snapshot.return_value
+    )
+    assert mock_config.stash[utils.COMPARATOR_KEY] is mock_comparator_cls.return_value
+
     if basetemp is not None:
         mock_dir_ignore_spec.assert_has_calls(
             [call(directory=mock_config.rootpath / basetemp)]
         )
     else:
         mock_dir_ignore_spec.assert_not_called()
-    mock_regex_ignore_spec.assert_has_calls([call(regex=r".*/__pycache__.*")])
+    mock_name_ignore_spec.assert_has_calls(
+        [
+            call(name="__pycache__"),
+            call(name="venv"),
+            call(name=".venv"),
+            call(name=".pytest_cache"),
+        ]
+    )
 
 
 def test_pytest_runtest_call(monkeypatch: "MonkeyPatch") -> None:
@@ -218,6 +245,6 @@ def test_plugin_with_pytester(pytester: pytest.Pytester) -> None:
     # pytester uses basetemp internally, so the case without basetemp
     # cannot be tested using pytester.
     pytester.copy_example("pytest.ini")
-    pytester.copy_example("pytester_tests.py")
+    pytester.copy_example("suite_tests.py")
     result: pytest.RunResult = pytester.runpytest()
     result.assert_outcomes(passed=2, xfailed=2)

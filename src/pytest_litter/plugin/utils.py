@@ -4,8 +4,14 @@ from typing import Callable
 
 import pytest
 
-from pytest_litter.snapshots import SnapshotComparator, SnapshotComparison, TreeSnapshot
+from pytest_litter.snapshots import (
+    SnapshotComparator,
+    SnapshotComparison,
+    TreeSnapshot,
+    TreeSnapshotFactory,
+)
 
+SNAPSHOT_FACTORY_KEY = pytest.StashKey[TreeSnapshotFactory]()
 SNAPSHOT_KEY = pytest.StashKey[TreeSnapshot]()
 COMPARATOR_KEY = pytest.StashKey[SnapshotComparator]()
 
@@ -50,7 +56,10 @@ def run_snapshot_comparison(
 ) -> None:
     """Compare current and old snapshots and call mismatch_cb if there is a mismatch."""
     original_snapshot: TreeSnapshot = config.stash[SNAPSHOT_KEY]
-    new_snapshot: TreeSnapshot = TreeSnapshot(root=original_snapshot.root)
+    snapshot_factory: TreeSnapshotFactory = config.stash[SNAPSHOT_FACTORY_KEY]
+    new_snapshot: TreeSnapshot = snapshot_factory.create_snapshot(
+        root=original_snapshot.root
+    )
     config.stash[SNAPSHOT_KEY] = new_snapshot
 
     comparator: SnapshotComparator = config.stash[COMPARATOR_KEY]
