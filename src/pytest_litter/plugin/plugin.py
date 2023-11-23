@@ -20,9 +20,25 @@ from pytest_litter.snapshots import (
     TreeSnapshotFactory,
 )
 
+PARSER_GROUP = "pytest-litter"
+RUN_CHECK_OPTION_DEST_NAME = "check_litter"
+
+
+def pytest_addoption(parser):
+    """Add options to pytest (pytest hook function)."""
+    group = parser.getgroup(PARSER_GROUP)
+    group.addoption(
+        "--check-litter",
+        action="store_true",
+        dest=RUN_CHECK_OPTION_DEST_NAME,
+        help="Fail if tests create/remove files.",
+    )
+
 
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest-litter plugin (pytest hook function)."""
+    if not config.getoption(RUN_CHECK_OPTION_DEST_NAME):
+        return
     ignore_specs: list[IgnoreSpec] = []
     basetemp: Optional[str] = config.getoption("basetemp", None)
     if basetemp is not None:
@@ -45,8 +61,9 @@ def pytest_configure(config: pytest.Config) -> None:
 @pytest.hookimpl(hookwrapper=True)  # type: ignore[misc]
 def pytest_runtest_call(item: pytest.Item):  # type: ignore[no-untyped-def]
     yield
-    run_snapshot_comparison(
-        test_name=item.name,
-        config=item.config,
-        mismatch_cb=raise_test_error_from_comparison,
-    )
+    if item.config.getoption(RUN_CHECK_OPTION_DEST_NAME):
+        run_snapshot_comparison(
+            test_name=item.name,
+            config=item.config,
+            mismatch_cb=raise_test_error_from_comparison,
+        )
