@@ -24,7 +24,7 @@ PARSER_GROUP = "pytest-litter"
 RUN_CHECK_OPTION_DEST_NAME = "check_litter"
 
 
-def pytest_addoption(parser):
+def pytest_addoption(parser: pytest.Parser) -> None:
     """Add options to pytest (pytest hook function)."""
     group = parser.getgroup(PARSER_GROUP)
     group.addoption(
