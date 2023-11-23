@@ -58,7 +58,7 @@ def pytest_configure(config: pytest.Config) -> None:
     config.stash[COMPARATOR_KEY] = SnapshotComparator(config=litter_config)
 
 
-@pytest.hookimpl(hookwrapper=True)  # type: ignore[misc]
+@pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: pytest.Item):  # type: ignore[no-untyped-def]
     yield
     if item.config.getoption(RUN_CHECK_OPTION_DEST_NAME):
