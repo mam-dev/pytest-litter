@@ -1,8 +1,9 @@
 """Tests for the plugin module."""
+import itertools
 from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
-from unittest.mock import Mock, call
+from unittest.mock import ANY, Mock, call
 
 import pytest
 
@@ -137,8 +138,26 @@ def test_run_snapshot_comparison(
         mock_cb.assert_called_once_with(test_name, mock_comparator.compare.return_value)
 
 
-@pytest.mark.parametrize("basetemp", [None, Path("tmp")])
-def test_pytest_configure(monkeypatch: "MonkeyPatch", basetemp: Optional[Path]) -> None:
+def test_pytest_addoption() -> None:
+    mock_parser = Mock(spec=pytest.Parser)
+    plugin.pytest_addoption(mock_parser)
+    assert mock_parser.mock_calls == [
+        call.getgroup("pytest-litter"),
+        call.getgroup().addoption(
+            "--check-litter",
+            action="store_true",
+            dest=plugin.RUN_CHECK_OPTION_DEST_NAME,
+            help=ANY,
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "run_check, basetemp", itertools.product([True, False], [None, Path("tmp")])
+)
+def test_pytest_configure(
+    monkeypatch: "MonkeyPatch", run_check: bool, basetemp: Optional[Path]
+) -> None:
     mock_snapshot_factory_cls = Mock(spec=snapshots.TreeSnapshotFactory)
     monkeypatch.setattr(
         "pytest_litter.plugin.plugin.TreeSnapshotFactory",
@@ -153,7 +172,7 @@ def test_pytest_configure(monkeypatch: "MonkeyPatch", basetemp: Optional[Path]) 
         spec=pytest.Config,
         rootpath=Path("rootpath"),
         stash={},
-        getoption=Mock(spec=pytest.Config.getoption, return_value=basetemp),
+        getoption=Mock(spec=pytest.Config.getoption, side_effect=[run_check, basetemp]),
     )
     mock_litter_config_cls = Mock(spec=snapshots.LitterConfig)
     monkeypatch.setattr(
@@ -179,40 +198,55 @@ def test_pytest_configure(monkeypatch: "MonkeyPatch", basetemp: Optional[Path]) 
 
     plugin.pytest_configure(mock_config)
 
-    mock_config.getoption.assert_called_once_with("basetemp", None)
-    mock_litter_config_cls.assert_called_once_with(
-        ignore_specs=expected_ignore_specs,
-    )
-    mock_snapshot_factory_cls.assert_called_once_with(
-        config=mock_litter_config_cls.return_value
-    )
-    mock_snapshot_factory_cls.return_value.create_snapshot.assert_called_once_with(
-        root=mock_config.rootpath
-    )
-    assert (
-        mock_config.stash[utils.SNAPSHOT_FACTORY_KEY]
-        is mock_snapshot_factory_cls.return_value
-    )
-    assert (
-        mock_config.stash[utils.SNAPSHOT_KEY]
-        is mock_snapshot_factory_cls.return_value.create_snapshot.return_value
-    )
-    assert mock_config.stash[utils.COMPARATOR_KEY] is mock_comparator_cls.return_value
+    expected_getoption_calls = [
+        call(plugin.RUN_CHECK_OPTION_DEST_NAME),
+    ]
+    if run_check:
+        expected_getoption_calls.append(call("basetemp", None))
+    assert mock_config.getoption.mock_calls == expected_getoption_calls
 
-    if basetemp is not None:
-        mock_dir_ignore_spec.assert_has_calls(
-            [call(directory=mock_config.rootpath / basetemp)]
+    if run_check:
+        mock_litter_config_cls.assert_called_once_with(
+            ignore_specs=expected_ignore_specs,
+        )
+        mock_snapshot_factory_cls.assert_called_once_with(
+            config=mock_litter_config_cls.return_value
+        )
+        mock_snapshot_factory_cls.return_value.create_snapshot.assert_called_once_with(
+            root=mock_config.rootpath
+        )
+        assert (
+            mock_config.stash[utils.SNAPSHOT_FACTORY_KEY]
+            is mock_snapshot_factory_cls.return_value
+        )
+        assert (
+            mock_config.stash[utils.SNAPSHOT_KEY]
+            is mock_snapshot_factory_cls.return_value.create_snapshot.return_value
+        )
+        assert (
+            mock_config.stash[utils.COMPARATOR_KEY] is mock_comparator_cls.return_value
+        )
+
+        if basetemp is not None:
+            mock_dir_ignore_spec.assert_has_calls(
+                [call(directory=mock_config.rootpath / basetemp)]
+            )
+        else:
+            mock_dir_ignore_spec.assert_not_called()
+        mock_name_ignore_spec.assert_has_calls(
+            [
+                call(name="__pycache__"),
+                call(name="venv"),
+                call(name=".venv"),
+                call(name=".pytest_cache"),
+            ]
         )
     else:
-        mock_dir_ignore_spec.assert_not_called()
-    mock_name_ignore_spec.assert_has_calls(
-        [
-            call(name="__pycache__"),
-            call(name="venv"),
-            call(name=".venv"),
-            call(name=".pytest_cache"),
-        ]
-    )
+        mock_litter_config_cls.assert_not_called()
+        mock_snapshot_factory_cls.assert_not_called()
+        assert utils.SNAPSHOT_FACTORY_KEY not in mock_config.stash
+        assert utils.SNAPSHOT_KEY not in mock_config.stash
+        assert utils.COMPARATOR_KEY not in mock_config.stash
 
 
 def test_pytest_runtest_call(monkeypatch: "MonkeyPatch") -> None:
@@ -240,11 +274,40 @@ def test_pytest_runtest_call(monkeypatch: "MonkeyPatch") -> None:
     )
 
 
+def test_pytest_runtest_call__no_check_litter(monkeypatch: "MonkeyPatch") -> None:
+    mock_run_comparison = Mock(spec=utils.run_snapshot_comparison)
+    monkeypatch.setattr(
+        "pytest_litter.plugin.plugin.run_snapshot_comparison",
+        mock_run_comparison,
+    )
+    mock_item = Mock(spec=pytest.Item)
+    mock_item.config = Mock(spec=pytest.Config)
+    mock_item.config.getoption.return_value = False
+
+    # The list comprehension is just to get past the yield statement#
+    _ = list(plugin.pytest_runtest_call(mock_item))
+
+    mock_item.config.getoption.assert_called_once_with(
+        plugin.RUN_CHECK_OPTION_DEST_NAME
+    )
+    mock_run_comparison.assert_not_called()
+
+
 @pytest.mark.integration_test
-def test_plugin_with_pytester(pytester: pytest.Pytester) -> None:
+def test_plugin_with_pytester__check_litter(pytester: pytest.Pytester) -> None:
+    # pytester uses basetemp internally, so the case without basetemp
+    # cannot be tested using pytester.
+    pytester.copy_example("pytest.ini")
+    pytester.copy_example("suite_tests.py")
+    result: pytest.RunResult = pytester.runpytest("--check-litter")
+    result.assert_outcomes(passed=2, xfailed=2)
+
+
+@pytest.mark.integration_test
+def test_plugin_with_pytester__no_check_litter(pytester: pytest.Pytester) -> None:
     # pytester uses basetemp internally, so the case without basetemp
     # cannot be tested using pytester.
     pytester.copy_example("pytest.ini")
     pytester.copy_example("suite_tests.py")
     result: pytest.RunResult = pytester.runpytest()
-    result.assert_outcomes(passed=2, xfailed=2)
+    result.assert_outcomes(passed=2, xpassed=2)

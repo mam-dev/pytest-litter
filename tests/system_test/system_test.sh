@@ -13,7 +13,7 @@ python3 -m venv "${VENV}"
 "${VENV}/bin/python3" -m pip install --quiet --editable "${ROOT_DIR}" || exit 1
 
 echo "Executing system test..."
-pytest -p pytest-litter --basetemp=tmp  || exit 1
+pytest -p pytest-litter --basetemp=tmp --check-litter  || exit 1
 
 popd &> /dev/null || exit 1
 
